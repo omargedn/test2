@@ -22,12 +22,31 @@ import time
 warnings.filterwarnings("ignore")
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
+def local_css():
+    st.markdown("""
+    <style>
+        .stTextArea textarea {font-family: 'Courier New', monospace; font-size: 14px;}
+        .metric-card {
+            background-color: #f0f2f6;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+        }
+        .highlight { color: #00cc00; font-weight: bold; }
+        .warning { color: #ffa500; font-weight: bold; }
+        .danger { color: #ff4b4b; font-weight: bold; }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- Dataclass ---
 @dataclass
 class FieldData:
     value: Any
     source: str
     confidence: float = 1.0
+
+
 
 class ProcessStatus:
     def __init__(self):
@@ -1133,210 +1152,121 @@ class RealEstateAutomationSystem:
             st.error("❌ AI Qualifier NOT initialized (API client missing).")
 
     def process_lead(self, input_file_path: str, input_filename: str) -> tuple[str, str]:
-        """Process a single lead file and return report content and filename"""
-        
-        status_tracker = ProcessStatus()
-        status_tracker.update_stage('file_upload', 'complete')
-        
-        st.subheader("🔄 Processing Status")
-        status_tracker.display_status()
-        
-        st.info("📝 Parsing form data...")
-        form_data = self.form_parser.parse_file(input_file_path)
-        
-        call_recording_url = form_data.get('call_recording').value if form_data.get('call_recording') else None
-        
-        status_tracker.update_stage('data_parsing', 'complete')
-        status_tracker.display_status()
-
-        audio_result = {'success': False}
-        transcript = None
-        nlp_analysis = {}
-        
-        if call_recording_url and call_recording_url.strip():
-            st.info("🎵 Processing call recording...")
-            audio_result = self.audio_processor.transcribe_audio(call_recording_url, status_tracker)
-
-            if not audio_result['success']:
-                st.error("🚫 PROCESS STOPPED: Transcription failed. Please check the audio URL and try again.")
-                status_tracker.display_status()
-                return "Process stopped due to transcription failure", "error.txt"
+        # --- NEW: Collapsible Status Container ---
+        with st.status("🔄 System Processing...", expanded=True) as status:
             
-            if audio_result['success']:
+            st.write("📂 Uploading and parsing file...")
+            form_data = self.form_parser.parse_file(input_file_path)
+            call_recording_url = form_data.get('call_recording').value if form_data.get('call_recording') else None
+            
+            audio_result = {'success': False}
+            transcript = None
+            nlp_analysis = {}
+            
+            if call_recording_url and call_recording_url.strip():
+                st.write("🎧 Transcribing audio (Groq API)...")
+                audio_result = self.audio_processor.transcribe_audio(call_recording_url) # Removed status_tracker arg
+
+                if not audio_result['success']:
+                    status.update(label="❌ Processing Failed", state="error")
+                    st.error("Transcription failed.")
+                    return "Process stopped", "error.txt"
+                
                 transcript = audio_result['transcript']
-                # <--- ADD THIS NEW BLOCK --->
-                with st.spinner("🗣️ AI is identifying speakers (Diarization)..."):
-                    agent_name = form_data.get('agent_name').value
-                    seller_name = form_data.get('seller_name').value
-                    
-                    # Overwrite the raw transcript with the labeled version
-                    transcript = self.rephraser.diarize_transcript(transcript, agent_name, seller_name)
-                    audio_result['transcript'] = transcript
-                # <--- END NEW BLOCK --->
                 
-                with st.spinner("🤖 Analyzing conversation with fast NLP..."):
-                    nlp_analysis = self.nlp_analyzer.analyze_transcript(transcript)
+                st.write("🗣️ Identifying speakers (Diarization)...")
+                agent_name = form_data.get('agent_name').value
+                seller_name = form_data.get('seller_name').value
+                transcript = self.rephraser.diarize_transcript(transcript, agent_name, seller_name)
+                audio_result['transcript'] = transcript
 
-                st.info("🧠 STARTING DEEPSEEK AI ANALYSIS...")
-                
-                with st.spinner("🧠 Cleaning 'Property Type' with AI..."):
-                    current_property_type = form_data.get('property_type').value if form_data.get('property_type') else ""
-                    if current_property_type and current_property_type != "Property Type Not Specified":
-                        ai_property_type = self.rephraser.rephrase("Property Type", current_property_type)
-                        if ai_property_type and "Transcript too short" not in ai_property_type:
-                            form_data['property_type'] = FieldData(
-                                value=ai_property_type,
-                                source='conversation', 
-                                confidence=0.95
-                            )
-                    
-                with st.spinner("🧠 Analyzing 'Reason for Selling' with AI..."):
-                    ai_reason = self.rephraser.rephrase("Reason for Selling", transcript)
-                    nlp_analysis['reason'] = ai_reason
-                
-                with st.spinner("🧠 Analyzing 'Property Condition' with AI..."):
-                    ai_condition = self.rephraser.rephrase("Property Condition", transcript)
-                    nlp_analysis['condition'] = ai_condition
-                
-                with st.spinner("🧠 Analyzing 'Mortgage Status' with AI..."):
-                    ai_mortgage = self.rephraser.rephrase("Mortgage Status", transcript)
-                    nlp_analysis['mortgage'] = ai_mortgage
-                
-                with st.spinner("🧠 Analyzing 'Occupancy Status' with AI..."):
-                    ai_occupancy = self.rephraser.rephrase("Occupancy Status", transcript)
-                    nlp_analysis['tenant'] = ai_occupancy
+                st.write("🧠 Analyzing conversation psychology...")
+                nlp_analysis = self.nlp_analyzer.analyze_transcript(transcript)
 
-                with st.spinner("🧠 Identifying important call highlights..."):
-                    ai_highlights = self.rephraser.rephrase("Important Highlights", transcript)
-                    nlp_analysis['highlights'] = ai_highlights
-
-                with st.spinner("🧠 Analyzing 'Seller Personality' with AI..."):
-                    ai_personality = self.rephraser.rephrase("Seller Personality", transcript)
-                    nlp_analysis['personality'] = ai_personality
+                st.write("🤖 Extracting DeepSeek insights...")
+                # AI Analysis Steps
+                curr_pt = form_data.get('property_type').value or ""
+                if curr_pt and "Not Specified" not in curr_pt:
+                    ai_pt = self.rephraser.rephrase("Property Type", curr_pt)
+                    if ai_pt and "Transcript too short" not in ai_pt:
+                        form_data['property_type'] = FieldData(ai_pt, 'conversation', 0.95)
                 
-                st.success("✅ DEEPSEEK AI ANALYSIS COMPLETE")
+                nlp_analysis['reason'] = self.rephraser.rephrase("Reason for Selling", transcript)
+                nlp_analysis['condition'] = self.rephraser.rephrase("Property Condition", transcript)
+                nlp_analysis['mortgage'] = self.rephraser.rephrase("Mortgage Status", transcript)
+                nlp_analysis['tenant'] = self.rephraser.rephrase("Occupancy Status", transcript)
+                nlp_analysis['highlights'] = self.rephraser.rephrase("Important Highlights", transcript)
+                nlp_analysis['personality'] = self.rephraser.rephrase("Seller Personality", transcript)
 
-                status_tracker.update_stage('ai_analysis', 'complete')
-                status_tracker.display_status()
-                
-                with st.spinner("🔄 Applying AI conversation insights to form data..."):
-                    form_data = self._apply_conversation_insights(form_data, nlp_analysis)
+                st.write("🔄 Merging data sources...")
+                form_data = self._apply_conversation_insights(form_data, nlp_analysis)
                 
             else:
-                st.error(f"❌ Audio processing failed: {audio_result.get('error')}")
-        else:
-            st.warning("⚠️ No call recording URL found in form data. Skipping audio analysis.")
-            nlp_analysis = {
-                'reason': "No transcript available",
-                'condition': "No transcript available", 
-                'mortgage': "No transcript available",
-                'tenant': "No transcript available",
-                'motivation': "No transcript available",
-                'personality': "No transcript available"
-            }
+                st.warning("⚠️ No call recording URL found.")
 
-        with st.spinner("🔗 Deriving dependent fields (Moving Time)..."):
+            st.write("🔗 Finalizing derived fields...")
             form_data = self.data_merger.merge(form_data, transcript, audio_result)
 
-        st.info("⚖️ Starting final AI-powered lead qualification...")
-        qualification_results = self.ai_qualifier.qualify(form_data)
-        status_tracker.update_stage('qualification', 'complete')
-        status_tracker.display_status()
+            st.write("⚖️ Calculating Lead Score...")
+            qualification_results = self.ai_qualifier.qualify(form_data)
+            
+            st.write("📄 Generating report...")
+            report_content = self.report_generator.generate_report(form_data, transcript, audio_result, nlp_analysis, qualification_results, input_filename)
+            
+            output_filename = self.report_generator.save_report(report_content, input_filename)
+            
+            status.update(label="✅ Processing Complete!", state="complete", expanded=False)
         
-        st.info("📊 Generating final report...")
-        report_content = self.report_generator.generate_report(
-            form_data, 
-            transcript, 
-            audio_result,
-            nlp_analysis,
-            qualification_results,
-            input_filename
-        )
-        status_tracker.update_stage('report_generation', 'complete')
-        status_tracker.display_status()
+        # --- NEW: Dashboard Results Layout ---
+        st.divider()
+        st.subheader("📊 Lead Dashboard")
         
-        output_filename = self.report_generator.save_report(report_content, input_filename)
-        
-        st.subheader("🎉 PROCESSING RESULTS")
-        
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
-            "📋 FORM DATA", 
-            "🎵 TRANSCRIPT", 
-            "🤖 AI ANALYSIS", 
-            "⚖️ QUALIFICATION", 
-            "📄 FINAL REPORT"
-        ])
+        # Top Row Metrics
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            score = qualification_results.get('total_score', 0)
+            st.metric("Lead Score", f"{score}/100", delta="High Priority" if score > 75 else None)
+        with col2:
+            verdict = qualification_results.get('verdict', 'N/A')
+            st.metric("Verdict", verdict)
+        with col3:
+            price = form_data.get('asking_price', FieldData("N/A","")).value
+            st.metric("Asking Price", str(price)[:15])
+        with col4:
+            motivation = nlp_analysis.get('motivation', 'N/A')
+            st.metric("Motivation", motivation)
+
+        # Tabs Layout
+        tab1, tab2, tab3, tab4 = st.tabs(["📄 FINAL REPORT", "🧠 AI INSIGHTS", "🎵 TRANSCRIPT", "📋 RAW DATA"])
         
         with tab1:
-            st.header("📋 Parsed Form Data")
-            form_display = []
-            for field_key, field_data in form_data.items():
-                if field_data.value and field_data.value not in ["", "Not mentioned"]:
-                    display_name = next((names[0] for key, names in self.form_parser.field_patterns.items() if key == field_key), field_key)
-                    form_display.append(f"◇{display_name}: {field_data.value}")
+            st.download_button("⬇️ Download Report .txt", report_content, output_filename, type='primary')
+            st.text_area("Report Preview", report_content, height=600, label_visibility="collapsed")
             
-            st.text_area("Form Data", "\n".join(form_display), height=500, key="form_data_tab")
-        
         with tab2:
-            st.header("🎵 Call Transcript")
-            if transcript and transcript != "No transcription available":
-                st.text_area("Transcript", transcript, height=500, key="transcript_tab")
-            else:
-                st.info("No transcript available for this lead")
-        
-        with tab3:
-            st.header("🤖 AI Conversation Analysis")
+            c1, c2 = st.columns(2)
+            with c1:
+                st.info("**💡 Key Highlights**")
+                st.markdown(nlp_analysis.get('highlights', 'No highlights'))
+                st.divider()
+                st.info("**🏠 Condition Notes**")
+                st.write(nlp_analysis.get('condition', 'N/A'))
+            with c2:
+                st.success("**💰 Financials**")
+                st.write(f"**Mortgage:** {nlp_analysis.get('mortgage', 'N/A')}")
+                st.write(f"**Reason:** {nlp_analysis.get('reason', 'N/A')}")
+                st.divider()
+                st.warning("**👤 Seller Profile**")
+                st.write(nlp_analysis.get('personality', 'N/A'))
+
+        with tab3: 
+            st.markdown("### Call Transcript (Diarized)")
+            st.text_area("Transcript", transcript or "N/A", height=500, label_visibility="collapsed")
             
-            ai_analysis_content = []
+        with tab4: 
+            st.json(qualification_results)
+            st.write(form_data)
             
-            if 'reason' in nlp_analysis:
-                ai_analysis_content.append(f"◇Reason for Selling: {nlp_analysis['reason']}")
-            if 'condition' in nlp_analysis:
-                ai_analysis_content.append(f"◇Property Condition: {nlp_analysis['condition']}")
-            if 'mortgage' in nlp_analysis:
-                ai_analysis_content.append(f"◇Mortgage Status: {nlp_analysis['mortgage']}")
-            if 'tenant' in nlp_analysis:
-                ai_analysis_content.append(f"◇Occupancy Status: {nlp_analysis['tenant']}")
-            if 'personality' in nlp_analysis:
-                ai_analysis_content.append(f"◇Seller Personality: {nlp_analysis['personality']}")
-            if 'motivation' in nlp_analysis:
-                ai_analysis_content.append(f"◇Motivation Analysis: {nlp_analysis['motivation']}")
-            if 'highlights' in nlp_analysis:  
-                ai_analysis_content.append(f"◇Important Call Highlights:\n{nlp_analysis['highlights']}")  
-            
-            if ai_analysis_content:
-                st.text_area("AI Analysis Results", "\n".join(ai_analysis_content), height=500, key="ai_analysis_tab")
-            else:
-                st.info("No AI analysis available (no transcript)")
-        
-        with tab4:
-            st.header("⚖️ Lead Qualification")
-            
-            qual_content = [
-                f"◇Total Score: {qualification_results['total_score']}/100",
-                f"◇Verdict: {qualification_results['verdict']}",
-                "",
-                "BREAKDOWN:"
-            ]
-            
-            for category, data in qualification_results['breakdown'].items():
-                qual_content.append(f"◇{category.title()}: {data['score']} pts - {data['notes']}")
-            
-            st.text_area("Qualification Results", "\n".join(qual_content), height=500, key="qualification_tab")
-        
-        with tab5:
-            st.header("📄 Final Comprehensive Report")
-            st.text_area("Complete Report", report_content, height=500, key="final_report_tab")
-        
-        st.success(f"✅ Enhanced report generated!")
-        
-        st.download_button(
-            label="⬇️ Download Complete Report",
-            data=report_content,
-            file_name=output_filename,
-            mime="text/plain"
-        )
-        
         return report_content, output_filename
     
     def _apply_conversation_insights(self, form_data: Dict[str, FieldData], 
@@ -1400,80 +1330,71 @@ class RealEstateAutomationSystem:
         
         return form_data
 
-# --- STREAMLIT UI ---
-st.set_page_config(page_title="Real Estate Lead Automation", layout="wide")
-st.title("🏠 Real Estate Lead Automation System")
-st.markdown("Automated lead processing with AI-powered analysis")
+# --- MAIN STREAMLIT UI ---
+st.set_page_config(page_title="AI Real Estate Lead Manager", page_icon="🏠", layout="wide")
+local_css() # Apply the CSS
 
-# API Key Loading
-deepseek_api_key = None
-try:
-    deepseek_api_key = getattr(st, "secrets", {}).get("DEEPSEEK_API_KEY")
-except Exception:
-    deepseek_api_key = None 
-if not deepseek_api_key:
-    deepseek_api_key = os.getenv("DEEPSEEK_API_KEY")
-
-if deepseek_api_key:
-    st.success("✅ DeepSeek API key loaded")
-    os.environ["DEEPSEEK_API_KEY"] = deepseek_api_key 
-else:
-    st.error("❌ DEEPSEEK_API_KEY not found in Streamlit secrets or environment variables.")
-    st.warning("Please add your DEEPSEEK_API_KEY to your secrets to run the app.")
-    st.stop() 
-
-# Input Method Selection
-input_method = st.radio(
-    "Choose input method:",
-    ["📝 Paste Lead Data", "📁 Upload File"],
-    horizontal=True
-)
-
-lead_data = None
-source_name = "direct_input"
-
-if input_method == "📝 Paste Lead Data":
-    st.subheader("📝 Paste Lead Form Data")
-    lead_text = st.text_area(
-        "Paste your lead form data here:",
-        height=300,
-        placeholder="Paste your lead form data in this format:\n◇List Name:-\n◇Property Type:-\n◇Seller Name:-\n◇Phone Number:-\n◇Address:-\n◇Zillow link:-\n◇Asking Price:-\n◇Zillow Estimate:-\n◇Realtor Estimate:-\n◇Redfin Estimate:-\n◇Reason For Selling:-\n◇Motivation details:-\n◇Mortgage:-\n◇Condition:-\n◇Occupancy:-\n◇Closing time:-\n◇Moving time:-\n◇Best time to call back:-\n◇Agent Name:-\n◇Call recording:-",
-        label_visibility="collapsed"
-    )
+# --- Sidebar: Configuration & Inputs ---
+with st.sidebar:
+    st.title("🎛️ Controls")
     
-    if lead_text.strip():
-        lead_data = lead_text
-        source_name = "pasted_data"
-
-else:
-    st.subheader("📁 Upload Lead File")
-    uploaded_file = st.file_uploader("Select a `.txt` lead file", type=["txt"], label_visibility="collapsed")
+    st.subheader("🔑 System Status")
+    if os.getenv("DEEPSEEK_API_KEY") or st.secrets.get("DEEPSEEK_API_KEY"):
+        st.success("🧠 Intelligence: Online")
+    else:
+        st.error("🧠 Intelligence: Offline")
+        
+    if os.getenv("GROQ_API_KEY") or st.secrets.get("GROQ_API_KEY"):
+        st.success("👂 Hearing: Online")
+    else:
+        st.error("👂 Hearing: Offline")
     
-    if uploaded_file is not None:
-        lead_data = uploaded_file.getvalue().decode('utf-8')
-        source_name = uploaded_file.name
-
-# Process Button
-if lead_data:
-    st.markdown("---")
+    st.divider()
     
-    with st.expander("📋 Data Preview", expanded=True):
-        st.text(lead_data[:1000] + "..." if len(lead_data) > 1000 else lead_data)
+    st.subheader("📥 Input Method")
+    input_method = st.radio("Select Source:", ["📝 Paste Text", "📁 Upload File"])
     
-    if st.button("🚀 Process Lead", type="primary"):
-        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt', encoding='utf-8') as tmp_file:
-            tmp_file.write(lead_data)
-            temp_file_path = tmp_file.name
+    lead_data = None
+    source_name = "direct_input"
 
-        try:
-            system = RealEstateAutomationSystem()
-            report_content, report_filename = system.process_lead(temp_file_path, source_name)
-            st.success("✅ Lead processing completed! Check the tabs above for detailed results.")
+    if input_method == "📝 Paste Text":
+        lead_data = st.text_area("Paste Form Data:", height=200, placeholder="◇List Name: ...")
+        if lead_data: source_name = "pasted_data"
+    else:
+        uploaded_file = st.file_uploader("Upload .txt lead", type=["txt"])
+        if uploaded_file:
+            lead_data = uploaded_file.getvalue().decode('utf-8')
+            source_name = uploaded_file.name
 
-        except Exception as e:
-            st.error(f"An unexpected error occurred: {e}")
-            st.exception(e)
-            
-        finally:
-            if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
-                os.unlink(temp_file_path)
+    st.divider()
+    process_btn = st.button("🚀 Process Lead", type="primary", use_container_width=True)
+
+# --- Main Area ---
+st.title("🏠 AI Real Estate Manager")
+st.caption("Automated Lead Qualification, Transcription & Analysis System")
+
+if not lead_data:
+    st.info("👈 Please provide lead data in the sidebar to begin.")
+    
+    # Optional: Show a dummy example if empty
+    with st.expander("See Example Input Format"):
+        st.code("""◇List Name: out of state
+◇Property Type: Single Family
+◇Seller Name: John Doe
+◇Call recording: https://example.com/audio.mp3""", language="text")
+
+if lead_data and process_btn:
+    # Create temp file
+    with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt', encoding='utf-8') as tmp_file:
+        tmp_file.write(lead_data)
+        temp_file_path = tmp_file.name
+
+    try:
+        system = RealEstateAutomationSystem()
+        system.process_lead(temp_file_path, source_name)
+    except Exception as e:
+        st.error(f"An unexpected error occurred: {e}")
+        st.exception(e)
+    finally:
+        if 'temp_file_path' in locals() and os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
