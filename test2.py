@@ -587,23 +587,19 @@ class AIRephraser:
 
         elif topic_name == "Property Condition":
             system_prompt = f"""
-            You are an expert real estate call analyst.
-            Your job is to analyze the following call transcript and summarize
-            the seller's description of the property's condition into a clear, concise statement.
+            You are an expert real estate inspector writing a property condition report.
+            Extract specific condition details from the transcript (renovations, age of roof/HVAC, repairs needed, damages, or "vacant").
             
-            CRITICAL INSTRUCTIONS:
-            - Focus on ACTUAL condition details mentioned: roof, HVAC, foundation, repairs needed, updates, age, etc.
-            - If NO specific condition details are mentioned, return: "No specific condition details discussed"
-            - Be realistic and factual - only mention what was actually discussed
-            - Keep it to 1-2 sentences maximum
-            - DO NOT make up or assume condition details
-            - DO NOT use bullet points
-            -Make the answer have all informaation about the condition of the property , but also not too long
-
+            CRITICAL RULES:
+            1. Return ONLY the facts. (e.g., "Brand new kitchen installed. Full bath in basement.")
+            2. DO NOT use filler phrases like "The seller mentioned," "No other details," or "It was discussed that."
+            3. DO NOT say what is missing. (e.g., Do NOT say "No roof details were given.")
+            4. If the transcript contains NO useful condition information, return exactly: "None"
+            
             Transcript:
             {transcript}
             """
-            question = "What specific details about the property's condition were mentioned in the conversation?"
+            question = "Extract the property condition facts professionally."
 
         elif topic_name == "Mortgage Status":
             system_prompt = f"""
@@ -691,19 +687,19 @@ class AIRephraser:
             Analyze this conversation transcript and identify the 3-5 most important highlights that a real estate investor should know.
             
             FOCUS ON:
+            - **Financing constraints: Does the seller require CASH? Do they refuse Land Contracts/Creative finance?** <-- ADDED THIS
             - Urgent motivations or timelines
             - Financial pressures (taxes, mortgage, repairs needed)
             - Property condition issues or recent updates
             - Unique selling circumstances (inheritance, divorce, relocation)
             - Willingness to negotiate or flexibility
-            - Any red flags or opportunities
             
             FORMATTING RULES:
             - Return as bullet points (use • character)
             - Maximum 5 bullet points
             - Each bullet should be 1-2 sentences max
             - Be specific and actionable
-            - Focus on what matters for investment decisions
+            
             
             If no important highlights are found, return: "No critical highlights identified in the conversation."
             
@@ -1318,6 +1314,8 @@ class RealEstateAutomationSystem:
     
     def _apply_conversation_insights(self, form_data: Dict[str, FieldData], 
                                      nlp_analysis: Dict[str, str]) -> Dict[str, FieldData]:
+        
+        # ... (Keep 'reason' logic above this same) ...
         conversation_reason = nlp_analysis.get('reason', '')
         if conversation_reason and "no reason" not in conversation_reason.lower():
             cleaned_reason = self.data_validator.clean_reason_field(conversation_reason)
@@ -1326,39 +1324,49 @@ class RealEstateAutomationSystem:
                 source='conversation',
                 confidence=1.0
             )
+
+        # --- IMPROVED PROFESSIONAL CONDITION MERGE ---
+        ai_condition = nlp_analysis.get('condition', '').strip()
+        form_condition = form_data.get('condition', FieldData("", "")).value
         
-        conversation_condition = nlp_analysis.get('condition', '')
-        if conversation_condition and "no specific" not in conversation_condition.lower():
-            form_data['condition'] = FieldData(
-                value=conversation_condition,
-                source='conversation',
-                confidence=1.0
-            )
+        final_condition = form_condition # Start with what we have in the form
+
+        # Only touch it if AI found something valid and it's not "None"
+        if ai_condition and ai_condition != "None" and "no specific" not in ai_condition.lower():
+            
+            # Clean up the form condition to remove placeholders
+            if not form_condition or form_condition == "Not mentioned":
+                final_condition = ai_condition
+            else:
+                # INTELLIGENT MERGE: Combine them professionally
+                # Avoid duplicating if the AI found the exact same text
+                if ai_condition.lower() not in form_condition.lower():
+                    # Ensure ends with punctuation
+                    if final_condition and final_condition[-1] not in ['.', '!', '?']:
+                        final_condition += "."
+                    
+                    final_condition = f"{final_condition} {ai_condition}"
         
+        form_data['condition'] = FieldData(
+            value=final_condition,
+            source='merged',
+            confidence=1.0
+        )
+        # ---------------------------------------------
+
+        # ... (Keep the rest of the logic for mortgage, occupancy, etc. the same) ...
         conversation_mortgage = nlp_analysis.get('mortgage', '')
         if conversation_mortgage and "no mortgage information" not in conversation_mortgage.lower():
-            form_data['mortgage'] = FieldData(
-                value=conversation_mortgage, 
-                source='conversation',
-                confidence=0.95
-            )
-        
+            form_data['mortgage'] = FieldData(value=conversation_mortgage, source='conversation', confidence=0.95)
+            
         conversation_occupancy = nlp_analysis.get('tenant', '')
         if conversation_occupancy and "no occupancy information" not in conversation_occupancy.lower():
-            form_data['occupancy'] = FieldData(
-                value=conversation_occupancy, 
-                source='conversation',
-                confidence=0.95
-            )
-        
+            form_data['occupancy'] = FieldData(value=conversation_occupancy, source='conversation', confidence=0.95)
+            
         conversation_motivation = nlp_analysis.get('motivation', '')
         if conversation_motivation and "no motivation" not in conversation_motivation.lower():
-            form_data['motivation_details'] = FieldData(
-                value=conversation_motivation,
-                source='conversation',
-                confidence=0.9
-            )
-        
+            form_data['motivation_details'] = FieldData(value=conversation_motivation, source='conversation', confidence=0.9)
+            
         conversation_highlights = nlp_analysis.get('highlights', '')
         if conversation_highlights and "no critical highlights" not in conversation_highlights.lower():
             nlp_analysis['highlights'] = conversation_highlights
