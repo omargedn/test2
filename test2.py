@@ -687,7 +687,7 @@ class AIRephraser:
             Analyze this conversation transcript and identify the 3-5 most important highlights that a real estate investor should know.
             
             FOCUS ON:
-            - **Financing constraints: Does the seller require CASH? Do they refuse Land Contracts/Creative finance?** <-- ADDED THIS
+            - **Financing constraints: Does the seller require CASH? Do they refuse Land Contracts/Creative finance?**
             - Urgent motivations or timelines
             - Financial pressures (taxes, mortgage, repairs needed)
             - Property condition issues or recent updates
