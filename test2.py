@@ -336,18 +336,22 @@ class FormParser:
         return "Mortgage status unknown"
     
     def _clean_condition(self, condition: str) -> str:
-        condition_lower = condition.lower()
-        if 'total renovation' in condition_lower:
-            return "Property requires complete renovation"
-        if 'needs some repairs' in condition_lower:
-            return "Property requires some repairs"
-        if any(word in condition_lower for word in ['excellent', 'great', 'brand new']):
-            return "Property in excellent condition"
-        if any(word in condition_lower for word in ['good', 'nice', 'well maintained']):
-            return "Property in good condition"
-        if 'vacant lot' in condition_lower:
-            return "Vacant lot"
-        return condition
+        """
+        Clean condition field but PRESERVE specific details.
+        Do not replace detailed text with generic labels.
+        """
+        if not condition:
+            return "Not specified"
+            
+        condition_lower = condition.lower().strip()
+        
+        # Only normalize if it's a useless placeholder
+        if condition_lower in ['n/a', 'na', 'not available', 'unknown', 'not specified', '', 'none']:
+            return "Not specified"
+            
+        # If it's just a generic word, maybe capitalize it, but don't change it too much
+        # If the text is long (has details), return it as-is
+        return condition.strip()
     
     def _clean_reason(self, reason: str) -> str:
         reason_lower = reason.lower()
