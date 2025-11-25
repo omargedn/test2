@@ -652,23 +652,22 @@ class AIRephraser:
 
         elif topic_name == "Mortgage Status":
             system_prompt = f"""
-            You are an expert real estate call analyst.
-            Analyze this conversation transcript and determine the mortgage status of the property.
+            You are a data extraction bot. Analyze the transcript and extract the mortgage status.
             
-            CRITICAL INSTRUCTIONS:
-            - Be VERY specific about mortgage status
-            - put in consider the input value of mortage of the form data , compare it with the transcript and give your final answer 
-            - If mortgage exists, mention any amounts discussed
-            - If owned free and clear, state that clearly
-            - If no mortgage information is discussed, say "No mortgage information discussed"
-            - Use clear, direct language
-            -take in consideration that the whisper may have some errors , so be careful while giving the final answer
-            -answer must be correct and short 
+            CRITICAL OUTPUT RULES:
+            1. Return ONLY the status (Maximum 5 words).
+            2. DO NOT write full sentences like "The property is..."
+            3. DO NOT repeat the address.
+            4. Use these exact formats:
+               - "Free and clear"
+               - "Mortgage exists ($[Amount])"
+               - "Mortgage exists (Amount unknown)"
+               - "No mortgage information"
 
             Transcript:
             {transcript}
             """
-            question = "What is the mortgage status of the property based on the conversation?"
+            question = "What is the short mortgage status?"
 
         elif topic_name == "Occupancy Status":
             system_prompt = f"""
