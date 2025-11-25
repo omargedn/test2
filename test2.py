@@ -557,6 +557,51 @@ class AIRephraser:
         except Exception as e:
             st.error(f"❌ Failed to initialize DeepSeek client: {e}")
             return None
+        
+    # --- Update inside AIRephraser Class ---
+
+    def diarize_transcript(self, transcript: str, agent_name: str, seller_name: str) -> str:
+        """
+        Uses DeepSeek to identify speakers and add labels (Diarization).
+        """
+        if not self.client or not transcript:
+            return transcript
+
+        # Fallbacks if names are missing
+        agent_label = agent_name if agent_name and agent_name != "Not mentioned" else "Agent"
+        seller_label = seller_name if seller_name and seller_name != "Not mentioned" else "Seller"
+
+        system_prompt = f"""
+        You are a professional transcription editor. 
+        Your task is to format the following raw text into a dialogue script with speaker labels.
+        
+        The speakers are:
+        1. **{agent_label}** (The Real Estate Agent/Investor). Context clues: Asks about selling, asking price, condition, offers, closing time.
+        2. **{seller_label}** (The Property Owner). Context clues: Answers questions, talks about the house, negotiations, family situation.
+        
+        INSTRUCTIONS:
+        - Add the label "{agent_label}:" or "{seller_label}:" at the start of each turn.
+        - Fix minor grammar/punctuation errors but keep the wording authentic.
+        - Break up long blocks of text into natural dialogue turns.
+        - If there is a 3rd person (like a relative), label them "Relative".
+        
+        Raw Transcript:
+        {transcript}
+        """
+
+        try:
+            chat_completion = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": "Format and label this transcript."}
+                ],
+                temperature=0.1,
+                max_tokens=2000  # Allow enough space for the full conversation
+            )
+            return chat_completion.choices[0].message.content.strip()
+        except Exception:
+            return transcript # Return original if it fails
 
     def rephrase(self, topic_name: str, transcript: str) -> str:
         """Analyzes transcript using the DeepSeek API for a specific topic."""
@@ -1046,44 +1091,14 @@ class ReportGenerator:
             "-" * 50,
             "FULL CALL TRANSCRIPT",
             "-" * 50,
-            "(Note: Speaker labels are a 'best guess' and only added where confident.)",
             ""
         ]
-
-        agent_name_full = data.get('agent_name', FieldData("Agent", "", 0.0)).value
-        seller_name_full = data.get('seller_name', FieldData("Seller", "", 0.0)).value
-
-        agent_label = agent_name_full.split()[0].strip(":") if agent_name_full else "Agent"
-        seller_label = seller_name_full.split()[0].strip(":") if seller_name_full else "Seller"
-
-        max_label_len = max(len(agent_label), len(seller_label)) + 1
-
-        for text in transcript.splitlines():
-            text = text.strip()
-            if not text:
-                continue
-
-            text_lower = text.lower()
-            label = ""
-
-            if (("this is " + agent_label.lower()) in text_lower or \
-                ("my name is " + agent_label.lower()) in text_lower):
-                label = agent_label
-
-            elif "speaking" in text_lower and len(text_lower) < 20:
-                label = seller_label
-
-            elif (("this is " + seller_label.lower()) in text_lower or \
-                ("my name is " + seller_label.lower()) in text_lower):
-                label = seller_label
-
-            if label:
-                formatted_label = (label + ":").ljust(max_label_len)
-                lines.append(f"{formatted_label} {text}")
-            else:
-                formatted_label = " ".ljust(max_label_len + 1)
-                lines.append(f"{formatted_label} {text}")
-
+        
+        # DeepSeek has already formatted it, so we just add it line by line
+        for line in transcript.splitlines():
+            if line.strip():
+                lines.append(line.strip())
+                
         return lines + [""]
     
     def save_report(self, report_content: str, source_filename: str, 
@@ -1150,6 +1165,15 @@ class RealEstateAutomationSystem:
             
             if audio_result['success']:
                 transcript = audio_result['transcript']
+                # <--- ADD THIS NEW BLOCK --->
+                with st.spinner("🗣️ AI is identifying speakers (Diarization)..."):
+                    agent_name = form_data.get('agent_name').value
+                    seller_name = form_data.get('seller_name').value
+                    
+                    # Overwrite the raw transcript with the labeled version
+                    transcript = self.rephraser.diarize_transcript(transcript, agent_name, seller_name)
+                    audio_result['transcript'] = transcript
+                # <--- END NEW BLOCK --->
                 
                 with st.spinner("🤖 Analyzing conversation with fast NLP..."):
                     nlp_analysis = self.nlp_analyzer.analyze_transcript(transcript)
