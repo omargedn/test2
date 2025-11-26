@@ -1289,18 +1289,16 @@ class RealEstateAutomationSystem:
                 st.text_area("Data Preview", raw_data_content, height=800, label_visibility="collapsed")
             
         with tab2:
-            # --- Top Section: Columns ---
+            # --- Top Section: Highlights & Details ---
             c1, c2 = st.columns(2)
             with c1:
                 st.info("**💡 Key Highlights**")
                 highlights_raw = nlp_analysis.get('highlights', 'No highlights')
-                # Format Markdown lists and escape $ signs
                 formatted_highlights = highlights_raw.replace("$", "\$").replace("•", "\n\n-")
                 st.markdown(formatted_highlights)
                 
                 st.divider()
                 st.info("**🏠 Condition Notes**")
-                # Use Merged Form Data for full context
                 st.write(form_data.get('condition', FieldData("N/A", "")).value)
                 
             with c2:
@@ -1312,35 +1310,32 @@ class RealEstateAutomationSystem:
                 st.warning("**👤 Seller Profile**")
                 st.write(nlp_analysis.get('personality', 'N/A'))
 
-            # --- NEW SECTION: Qualification Scorecard ---
+            # --- NEW SECTION: Detailed Scoring Logic ---
             st.divider()
-            st.subheader("🎯 Qualification Scorecard")
+            st.subheader("💯 Qualification Scorecard & Logic")
             
-            # Get breakdown data safely
-            bd = qualification_results.get('breakdown', {})
-            
-            # Display as 4 metrics with small text for the "Why"
-            q1, q2, q3, q4 = st.columns(4)
-            
-            with q1:
-                data = bd.get('reason', {})
-                st.metric("Reason (50pts)", f"{data.get('score',0)} pts")
-                st.caption(f"📝 {data.get('notes', '-')}")
+            # Helper function to display a score row cleanly
+            def display_score_row(label, key, max_points):
+                item = qualification_results.get('breakdown', {}).get(key, {})
+                score = item.get('score', 0)
+                explanation = item.get('notes', 'No explanation provided.')
                 
-            with q2:
-                data = bd.get('price', {})
-                st.metric("Price (20pts)", f"{data.get('score',0)} pts")
-                st.caption(f"📝 {data.get('notes', '-')}")
-                
-            with q3:
-                data = bd.get('closing', {})
-                st.metric("Timeline (20pts)", f"{data.get('score',0)} pts")
-                st.caption(f"📝 {data.get('notes', '-')}")
-                
-            with q4:
-                data = bd.get('condition', {})
-                st.metric("Condition (10pts)", f"{data.get('score',0)} pts")
-                st.caption(f"📝 {data.get('notes', '-')}")
+                # Create a clean row
+                sc1, sc2 = st.columns([1, 4])
+                with sc1:
+                    st.metric(label, f"{score} / {max_points}")
+                with sc2:
+                    # Use different colors based on if they got the points or not
+                    if score > 0:
+                        st.success(f"**Passed:** {explanation}")
+                    else:
+                        st.error(f"**Failed:** {explanation}")
+
+            # Render the 4 rows
+            display_score_row("Motivation", "reason", 50)
+            display_score_row("Price", "price", 20)
+            display_score_row("Timeline", "closing", 20)
+            display_score_row("Condition", "condition", 10)
 
         with tab3: 
             st.markdown("### Call Transcript (Diarized)")
