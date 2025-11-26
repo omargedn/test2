@@ -1243,6 +1243,28 @@ class RealEstateAutomationSystem:
         st.divider()
         st.subheader("📊 Lead Dashboard")
         
+        # --- MOVE DOWNLOADS TO SIDEBAR ---
+        with st.sidebar:
+            st.divider()
+            st.header("💾 Exports")
+            
+            # 1. Data Only Download
+            raw_data_content = self.report_generator.generate_clean_data_block(form_data)
+            st.download_button(
+                label="⬇️ Processed Data (.txt)",
+                data=raw_data_content,
+                file_name=f"data_{input_filename}",
+                mime="text/plain"
+            )
+            
+            # 2. Full Report Download
+            st.download_button(
+                label="⬇️ Full AI Report (.txt)",
+                data=report_content,
+                file_name=output_filename,
+                mime="text/plain",
+                type='primary'
+            )
         # Top Row Metrics
         col1, col2, col3, col4 = st.columns(4)
         with col1:
@@ -1263,30 +1285,19 @@ class RealEstateAutomationSystem:
         tab1, tab2, tab3, tab4 = st.tabs(["💾 DOWNLOADS", "🧠 AI INSIGHTS", "🎵 TRANSCRIPT", "📋 RAW DATA"])
         
         with tab1:
-            st.write("### 📥 Export Options")
-            c1, c2 = st.columns(2)
+            st.subheader("📋 Final Processed Data")
+            st.caption("💡 **Tip:** Click inside the box below, press **Ctrl + A** to select all, then **Ctrl + C** to copy.")
             
-            with c1:
-                st.info("📄 **Full AI Report**\n\nIncludes Analysis, Score, Transcript, and Data.")
-                st.download_button(
-                    label="⬇️ Download Full Report (.txt)",
-                    data=report_content,
-                    file_name=output_filename,
-                    mime="text/plain",
-                    type='primary'
-                )
-                
-            with c2:
-                st.success("💾 **Processed Lead Data**\n\nJust the updated Key:Value pairs (No fluff).")
-                st.download_button(
-                    label="⬇️ Download Data Only (.txt)",
-                    data=raw_data_content,
-                    file_name=raw_data_filename,
-                    mime="text/plain"
-                )
-                
-            with st.expander("👀 Preview Processed Data"):
-                st.text_area("Data Preview", raw_data_content, height=800, label_visibility="collapsed")
+            # Generate the clean text block using the method we added earlier
+            clean_text_block = self.report_generator.generate_clean_data_block(form_data)
+            
+            # Display it in a large, copy-paste friendly box
+            st.text_area(
+                label="Final Data",
+                value=clean_text_block,
+                height=600,
+                label_visibility="collapsed" # Hides the small label above the box
+            )
             
         with tab2:
             # --- Top Section: Highlights & Details ---
