@@ -1020,6 +1020,25 @@ class ReportGenerator:
                 return f"◇{display_name}: Not mentioned"
         else:
             return f"◇{display_name}: Not mentioned"
+        
+    # --- Add this method inside ReportGenerator Class ---
+    def generate_clean_data_block(self, merged_data: Dict[str, FieldData]) -> str:
+        """Generates a clean text block of just the updated data (Input format)."""
+        lines = []
+        for field_key, display_name in self.form_fields:
+            # Get the final, merged, AI-enhanced value
+            val = merged_data.get(field_key, FieldData("", "")).value
+            
+            # Clean up "Not mentioned" for raw data - leave blank or keep as is?
+            # Usually for CRM import, we prefer the value or empty string.
+            if not val or val == "Not mentioned":
+                clean_val = ""
+            else:
+                clean_val = str(val).strip()
+                
+            lines.append(f"◇{display_name}: {clean_val}")
+            
+        return "\n".join(lines)
 
     def _format_section(self, title: str, fields_list: List[tuple], data: Dict[str, FieldData]) -> List[str]:
         lines = [
@@ -1210,7 +1229,10 @@ class RealEstateAutomationSystem:
             st.write("⚖️ Calculating Lead Score...")
             qualification_results = self.ai_qualifier.qualify(form_data)
             
+            
             st.write("📄 Generating report...")
+            raw_data_content = self.report_generator.generate_clean_data_block(form_data)
+            raw_data_filename = f"processed_{input_filename}"
             report_content = self.report_generator.generate_report(form_data, transcript, audio_result, nlp_analysis, qualification_results, input_filename)
             
             output_filename = self.report_generator.save_report(report_content, input_filename)
@@ -1237,24 +1259,62 @@ class RealEstateAutomationSystem:
             st.metric("Motivation", motivation)
 
         # Tabs Layout
-        tab1, tab2, tab3, tab4 = st.tabs(["📄 FINAL REPORT", "🧠 AI INSIGHTS", "🎵 TRANSCRIPT", "📋 RAW DATA"])
+       # --- IMPROVED TABS LAYOUT ---
+        tab1, tab2, tab3, tab4 = st.tabs(["💾 DOWNLOADS", "🧠 AI INSIGHTS", "🎵 TRANSCRIPT", "📋 RAW DATA"])
         
         with tab1:
-            st.download_button("⬇️ Download Report .txt", report_content, output_filename, type='primary')
-            st.text_area("Report Preview", report_content, height=600, label_visibility="collapsed")
+            st.write("### 📥 Export Options")
+            c1, c2 = st.columns(2)
+            
+            with c1:
+                st.info("📄 **Full AI Report**\n\nIncludes Analysis, Score, Transcript, and Data.")
+                st.download_button(
+                    label="⬇️ Download Full Report (.txt)",
+                    data=report_content,
+                    file_name=output_filename,
+                    mime="text/plain",
+                    type='primary'
+                )
+                
+            with c2:
+                st.success("💾 **Processed Lead Data**\n\nJust the updated Key:Value pairs (No fluff).")
+                st.download_button(
+                    label="⬇️ Download Data Only (.txt)",
+                    data=raw_data_content,
+                    file_name=raw_data_filename,
+                    mime="text/plain"
+                )
+                
+            with st.expander("👀 Preview Processed Data"):
+                st.text_area("Data Preview", raw_data_content, height=300)
             
         with tab2:
             c1, c2 = st.columns(2)
             with c1:
                 st.info("**💡 Key Highlights**")
-                st.markdown(nlp_analysis.get('highlights', 'No highlights'))
+                
+                # FIX 1 & 2: Format the text for Markdown (Fix bullets and Escape $ signs)
+                highlights_raw = nlp_analysis.get('highlights', 'No highlights')
+                formatted_highlights = highlights_raw.replace("$", "\$").replace("•", "\n\n-")
+                st.markdown(formatted_highlights)
+                
                 st.divider()
                 st.info("**🏠 Condition Notes**")
-                st.write(nlp_analysis.get('condition', 'N/A'))
+                
+                # FIX 3: Use 'form_data' (Merged) instead of 'nlp_analysis' (Raw AI)
+                # This ensures you see BOTH the "Roof 2017" (Form) AND "Brand new kitchen" (Call)
+                condition_final = form_data.get('condition', FieldData("N/A", "")).value
+                st.write(condition_final)
+                
             with c2:
                 st.success("**💰 Financials**")
-                st.write(f"**Mortgage:** {nlp_analysis.get('mortgage', 'N/A')}")
-                st.write(f"**Reason:** {nlp_analysis.get('reason', 'N/A')}")
+                # Use form_data here too for the cleaner text
+                mortgage_final = form_data.get('mortgage', FieldData("N/A", "")).value
+                reason_final = form_data.get('reason_for_selling', FieldData("N/A", "")).value
+                
+                st.write(f"**Mortgage:** {mortgage_final}")
+                st.write(f"**Reason:** {reason_final}")
+                
                 st.divider()
                 st.warning("**👤 Seller Profile**")
                 st.write(nlp_analysis.get('personality', 'N/A'))
