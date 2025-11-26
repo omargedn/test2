@@ -802,23 +802,19 @@ class AIRephraser:
             return f"Error analyzing {topic_name} with API."
 
 # --- AIQualifier Class ---
+# --- AIQualifier Class ---
 class AIQualifier:
-    """Analyzes final lead data against a set of business rules"""
-    
     def __init__(self, client):
         self.client = client
         self.model = "deepseek-chat"
-        self.re = re
 
     def _get_fallback_results(self, error_msg: str) -> Dict[str, Any]:
         return {
-            'total_score': 0,
+            'total_score': 0, 
             'verdict': "ERROR",
             'breakdown': {
-                'price': {'score': 0, 'notes': f"AI qualification failed: {error_msg}"},
-                'reason': {'score': 0, 'notes': f"AI qualification failed: {error_msg}"},
-                'closing': {'score': 0, 'notes': f"AI qualification failed: {error_msg}"},
-                'condition': {'score': 0, 'notes': f"AI qualification failed: {error_msg}"},
+                k: {'score': 0, 'notes': f"AI qualification failed: {error_msg}"} 
+                for k in ['price', 'reason', 'closing', 'condition']
             }
         }
 
@@ -826,69 +822,51 @@ class AIQualifier:
         return data.get(key, FieldData("Not Provided", "")).value
 
     def qualify(self, lead_data: Dict[str, FieldData]) -> Dict[str, Any]:
-        if not self.client:
+        if not self.client: 
             return self._get_fallback_results("API client not initialized")
 
+        # 1. Define data_summary FIRST (Safely)
         try:
-            data_summary = f"""
-            LEAD DATA:
+            data_summary = f"""LEAD DATA:
             - Asking Price: {self._get_val(lead_data, 'asking_price')}
             - Zillow Estimate: {self._get_val(lead_data, 'zillow_estimate')}
-            - Realtor Estimate: {self._get_val(lead_data, 'realtor_estimate')}
-            - Redfin Estimate: {self._get_val(lead_data, 'redfin_estimate')}
             - Reason for Selling: {self._get_val(lead_data, 'reason_for_selling')}
             - Closing Time: {self._get_val(lead_data, 'closing_time')}
-            - Property Condition: {self._get_val(lead_data, 'condition')}
-            """
-        except Exception as e:
+            - Property Condition: {self._get_val(lead_data, 'condition')}"""
+        except Exception as e: 
             return self._get_fallback_results(f"Failed to format data: {e}")
 
+        # 2. Define System Prompt (Using the defined data_summary)
+        # Note: Added strict rules to stop "Thinking out loud"
         system_prompt = f"""
-        You are an expert real estate lead qualification analyst. Your job is to analyze the following lead data and score it according to a strict set of rules.
-
-        QUALIFICATION RULES:
-        1.  **Reason for Selling (50 points):**
-            -   The reason MUST be a "solid reason" (e.g., relocation, divorce, financial trouble, inheritance, major life event).
-            -   "Weak reasons" (e.g., "don't need it anymore," "standard disposition," "no reason discussed," "not specified") get 0 points.
-            -   **Award 50 points for a solid reason, 0 for a weak one.**
-
-        2.  **Asking Price (20 points):**
-            -   First, calculate the average of all available market estimates (Zillow, Realtor, Redfin).
-            -   Then, check if the "Asking Price" is *below* that average market value.
-            -   If no asking price or no market estimates are provided, this fails.
-            -   **Award 20 points if it's below market, 0 otherwise.**
-
-        3.  **Closing Time (20 points):**
-            -   The "Closing Time" must be 6 months or less (e.g., "ASAP," "30 days," "flexible," "6 months").
-            -   If the time is over 6 months (e.g., "7 months," "next year") or not provided, it fails.
-            -   **Award 20 points if it's <= 6 months, 0 otherwise.**
-
-        4.  **Property Condition (10 points):**
-            -   Any specific details about the condition must be provided.
-            -   If the condition is "not specified," "no details discussed," or "no transcript," it fails.
-            -   **Award 10 points if *any* condition details are present, 0 otherwise.**
-
-        TASK:
-        Analyze this data blob, calculate the score for each rule, and provide a total score and verdict.
-
-        LEAD DATA TO ANALYZE:
+        You are an expert real estate lead qualification analyst. Analyze and score.
+        
+        RULES:
+        1. Reason (50 pts): Solid reason (relocation, divorce, financial, age) = 50. Weak/None = 0.
+        2. Price (20 pts): Asking price is LOWER than market estimates = 20. Higher = 0.
+        3. Closing (20 pts): Timeline is 6 months or less = 20. > 6 months = 0.
+        4. Condition (10 pts): Specific details (repairs/renovations) are present = 10. Vague/None = 0.
+        
+        LEAD DATA:
         {data_summary}
-
-        FINAL INSTRUCTIONS:
-        -   You MUST return your answer in a valid JSON format.
-        -   The JSON MUST match this exact structure:
-        {{
-          "total_score": <number>,
-          "verdict": "<string: 'PRIME LEAD' (>=80 pts), 'Review' (50-79 pts), or 'REJECT' (<50 pts)>",
-          "breakdown": {{
-            "price": {{ "score": <number>, "notes": "<string: Your brief justification>" }},
-            "reason": {{ "score": <number>, "notes": "<string: Your brief justification>" }},
-            "closing": {{ "score": <number>, "notes": "<string: Your brief justification>" }},
-            "condition": {{ "score": <number>, "notes": "<string: Your brief justification>" }}
-          }}
+        
+        CRITICAL OUTPUT RULES:
+        - Return Valid JSON only.
+        - The "notes" field must be the FINAL justification only. 
+        - DO NOT include internal thinking, "corrections", or "rechecks".
+        - If you award 0 points, explain why it failed directly.
+        
+        Return JSON format: 
+        {{ 
+            "total_score": <int>, 
+            "verdict": "PRIME LEAD|Review|REJECT", 
+            "breakdown": {{ 
+                "price": {{ "score": <int>, "notes": "<string>" }}, 
+                "reason": {{ "score": <int>, "notes": "<string>" }},
+                "closing": {{ "score": <int>, "notes": "<string>" }},
+                "condition": {{ "score": <int>, "notes": "<string>" }}
+            }} 
         }}
-        -   Be strict with the rules.
-        -   Do not include any text outside the JSON.
         """
 
         try:
@@ -896,19 +874,18 @@ class AIQualifier:
                 chat_completion = self.client.chat.completions.create(
                     model=self.model,
                     messages=[
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": "Analyze the lead data and return the qualification JSON."}
+                        {"role": "system", "content": system_prompt}, 
+                        {"role": "user", "content": "Analyze and score."}
                     ],
-                    temperature=0.0,
-                    max_tokens=500,
+                    temperature=0.0, 
+                    max_tokens=500, 
                     response_format={"type": "json_object"}
                 )
             
-            response_text = chat_completion.choices[0].message.content.strip()
-            results = json.loads(response_text)
+            results = json.loads(chat_completion.choices[0].message.content.strip())
             
-            if 'total_score' not in results or 'breakdown' not in results:
-                raise ValueError("AI response missing required keys")
+            if 'total_score' not in results:
+                raise ValueError("Missing total_score in AI response")
                 
             st.success(f"⭐ AI Lead Score: {results['total_score']}/100 ({results['verdict']})")
             return results
@@ -1326,17 +1303,20 @@ class RealEstateAutomationSystem:
             st.subheader("💯 Qualification Scorecard & Logic")
             
             # Helper function to display a score row cleanly
+           # Helper function to display a score row cleanly
             def display_score_row(label, key, max_points):
                 item = qualification_results.get('breakdown', {}).get(key, {})
                 score = item.get('score', 0)
-                explanation = item.get('notes', 'No explanation provided.')
+                
+                # FIX: Escape dollar signs so Streamlit doesn't turn them into weird math text
+                raw_explanation = item.get('notes', 'No explanation provided.')
+                explanation = raw_explanation.replace("$", "\$") 
                 
                 # Create a clean row
                 sc1, sc2 = st.columns([1, 4])
                 with sc1:
                     st.metric(label, f"{score} / {max_points}")
                 with sc2:
-                    # Use different colors based on if they got the points or not
                     if score > 0:
                         st.success(f"**Passed:** {explanation}")
                     else:
