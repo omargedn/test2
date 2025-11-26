@@ -1286,38 +1286,61 @@ class RealEstateAutomationSystem:
                 )
                 
             with st.expander("👀 Preview Processed Data"):
-                st.text_area("Data Preview", raw_data_content, height=300)
+                st.text_area("Data Preview", raw_data_content, height=800, label_visibility="collapsed")
             
         with tab2:
+            # --- Top Section: Columns ---
             c1, c2 = st.columns(2)
             with c1:
                 st.info("**💡 Key Highlights**")
-                
-                # FIX 1 & 2: Format the text for Markdown (Fix bullets and Escape $ signs)
                 highlights_raw = nlp_analysis.get('highlights', 'No highlights')
+                # Format Markdown lists and escape $ signs
                 formatted_highlights = highlights_raw.replace("$", "\$").replace("•", "\n\n-")
                 st.markdown(formatted_highlights)
                 
                 st.divider()
                 st.info("**🏠 Condition Notes**")
-                
-                # FIX 3: Use 'form_data' (Merged) instead of 'nlp_analysis' (Raw AI)
-                # This ensures you see BOTH the "Roof 2017" (Form) AND "Brand new kitchen" (Call)
-                condition_final = form_data.get('condition', FieldData("N/A", "")).value
-                st.write(condition_final)
+                # Use Merged Form Data for full context
+                st.write(form_data.get('condition', FieldData("N/A", "")).value)
                 
             with c2:
                 st.success("**💰 Financials**")
-                # Use form_data here too for the cleaner text
-                mortgage_final = form_data.get('mortgage', FieldData("N/A", "")).value
-                reason_final = form_data.get('reason_for_selling', FieldData("N/A", "")).value
-                
-                st.write(f"**Mortgage:** {mortgage_final}")
-                st.write(f"**Reason:** {reason_final}")
+                st.write(f"**Mortgage:** {form_data.get('mortgage', FieldData('N/A', '')).value}")
+                st.write(f"**Reason:** {form_data.get('reason_for_selling', FieldData('N/A', '')).value}")
                 
                 st.divider()
                 st.warning("**👤 Seller Profile**")
                 st.write(nlp_analysis.get('personality', 'N/A'))
+
+            # --- NEW SECTION: Qualification Scorecard ---
+            st.divider()
+            st.subheader("🎯 Qualification Scorecard")
+            
+            # Get breakdown data safely
+            bd = qualification_results.get('breakdown', {})
+            
+            # Display as 4 metrics with small text for the "Why"
+            q1, q2, q3, q4 = st.columns(4)
+            
+            with q1:
+                data = bd.get('reason', {})
+                st.metric("Reason (50pts)", f"{data.get('score',0)} pts")
+                st.caption(f"📝 {data.get('notes', '-')}")
+                
+            with q2:
+                data = bd.get('price', {})
+                st.metric("Price (20pts)", f"{data.get('score',0)} pts")
+                st.caption(f"📝 {data.get('notes', '-')}")
+                
+            with q3:
+                data = bd.get('closing', {})
+                st.metric("Timeline (20pts)", f"{data.get('score',0)} pts")
+                st.caption(f"📝 {data.get('notes', '-')}")
+                
+            with q4:
+                data = bd.get('condition', {})
+                st.metric("Condition (10pts)", f"{data.get('score',0)} pts")
+                st.caption(f"📝 {data.get('notes', '-')}")
 
         with tab3: 
             st.markdown("### Call Transcript (Diarized)")
