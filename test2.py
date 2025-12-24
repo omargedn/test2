@@ -430,6 +430,17 @@ class FormParser:
                 rf'{name}\s*:\s*(.+)',
             ]
             
+            # Special handling for call recording - can have URL directly after field name without colon
+            if 'call recording' in name.lower():
+                patterns.extend([
+                    rf'◇{name}\s+(https?://[^\s\n]+)',  # URL directly after field name (same line)
+                    rf'{name}\s+(https?://[^\s\n]+)',   # Without ◇ symbol (same line)
+                    rf'◇{name}\s*\n\s*(https?://[^\s\n]+)',  # URL on next line
+                    rf'{name}\s*\n\s*(https?://[^\s\n]+)',   # Without ◇, URL on next line
+                    rf'◇{name}\s+([^\n]+)',       # Any text after field name (fallback)
+                    rf'{name}\s+([^\n]+)',        # Without ◇ symbol (fallback)
+                ])
+            
             for pattern in patterns:
                 matches = re.findall(pattern, text, re.IGNORECASE | re.MULTILINE)
                 if matches:
@@ -468,6 +479,7 @@ class FormParser:
             'reason_for_selling': self._clean_reason,
             'closing_time': self._clean_closing_time,
             'motivation_details': self._clean_motivation,
+            'call_recording': self._clean_call_recording,
         }
         
         cleaner = cleaners.get(field, lambda x: x.strip())
@@ -645,6 +657,27 @@ class FormParser:
         if any(word in motivation_lower for word in ['motivated', 'ready']):
             return "Motivated"
         return "Standard motivation"
+    
+    def _clean_call_recording(self, url: str) -> str:
+        """Clean and validate call recording URL"""
+        if not url:
+            return ""
+        
+        # Remove any leading/trailing whitespace and newlines
+        url = url.strip()
+        
+        # Remove any trailing punctuation that might have been included
+        url = url.rstrip('.,;:')
+        
+        # Ensure it's a valid URL format
+        if url.startswith('http://') or url.startswith('https://'):
+            return url
+        
+        # If it doesn't start with http, try to fix it
+        if url.startswith('www.'):
+            return 'https://' + url
+        
+        return url
 
 # --- AudioProcessor Class ---
 # --- AudioProcessor Class (Groq API Version) ---
