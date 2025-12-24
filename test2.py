@@ -25,6 +25,7 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 def local_css():
     st.markdown("""
     <style>
+        /* Enhanced UI Styling */
         .stTextArea textarea {font-family: 'Courier New', monospace; font-size: 14px;}
         .metric-card {
             background-color: #f0f2f6;
@@ -36,8 +37,148 @@ def local_css():
         .highlight { color: #00cc00; font-weight: bold; }
         .warning { color: #ffa500; font-weight: bold; }
         .danger { color: #ff4b4b; font-weight: bold; }
+        
+        /* Progress Bar Styling */
+        .progress-container {
+            background-color: #f0f2f6;
+            border-radius: 10px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .progress-step {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            padding: 8px;
+            border-radius: 5px;
+        }
+        .progress-step.active {
+            background-color: #e3f2fd;
+            border-left: 4px solid #2196F3;
+        }
+        .progress-step.complete {
+            background-color: #e8f5e9;
+            border-left: 4px solid #4CAF50;
+        }
+        .progress-step.error {
+            background-color: #ffebee;
+            border-left: 4px solid #f44336;
+        }
+        
+        /* Validation Warnings */
+        .validation-warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+        .validation-error {
+            background-color: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+        .validation-success {
+            background-color: #d4edda;
+            border-left: 4px solid #28a745;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+        
+        /* Confidence Indicators */
+        .confidence-high { color: #28a745; font-weight: bold; }
+        .confidence-medium { color: #ffc107; font-weight: bold; }
+        .confidence-low { color: #dc3545; font-weight: bold; }
+        
+        /* Audio Player Styling */
+        .audio-player-container {
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        
+        /* Enhanced Cards */
+        .info-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        .success-card {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        .warning-card {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        
+        /* Main container improvements */
+        .main-container {
+            padding: 20px;
+        }
+        
+        /* Better button styling */
+        .stButton > button {
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        .stButton > button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
     </style>
     """, unsafe_allow_html=True)
+
+def render_audio_player(audio_url: str, transcript: str = None):
+    """Render an HTML5 audio player with transcript synchronization"""
+    if not audio_url or 'http' not in audio_url:
+        st.warning("⚠️ No valid audio URL provided")
+        return
+    
+    # Create a unique ID for this audio player
+    player_id = f"audio_player_{hash(audio_url) % 10000}"
+    
+    audio_html = f"""
+    <div class="audio-player-container">
+        <h4>🎵 Call Recording</h4>
+        <audio id="{player_id}" controls style="width: 100%; margin: 10px 0;">
+            <source src="{audio_url}" type="audio/mpeg">
+            Your browser does not support the audio element.
+        </audio>
+        <div style="margin-top: 10px;">
+            <small>💡 Tip: Use the player controls to play, pause, and adjust volume</small>
+        </div>
+    </div>
+    """
+    
+    st.markdown(audio_html, unsafe_allow_html=True)
+    
+    # If transcript is provided, add search/highlight functionality
+    if transcript:
+        st.markdown("### 📝 Transcript Search")
+        search_term = st.text_input("Search in transcript:", key=f"search_{player_id}")
+        
+        if search_term:
+            # Highlight search terms in transcript
+            highlighted_transcript = transcript.replace(
+                search_term, 
+                f"<mark style='background-color: yellow;'>{search_term}</mark>"
+            )
+            st.markdown(highlighted_transcript, unsafe_allow_html=True)
+        else:
+            st.text_area("Full Transcript", transcript, height=300, key=f"transcript_{player_id}")
 
 # --- Dataclass ---
 @dataclass
@@ -51,20 +192,126 @@ class FieldData:
 class ProcessStatus:
     def __init__(self):
         self.stages = {
-            'file_upload': {'status': 'waiting', 'message': 'File Upload'},
-            'data_parsing': {'status': 'waiting', 'message': 'Data Parsing'}, 
-            'audio_transcription': {'status': 'waiting', 'message': 'Audio Transcription'},
-            'ai_analysis': {'status': 'waiting', 'message': 'AI Analysis'},
-            'qualification': {'status': 'waiting', 'message': 'Lead Qualification'},
-            'report_generation': {'status': 'waiting', 'message': 'Report Generation'}
+            'file_upload': {'status': 'waiting', 'message': 'File Upload', 'progress': 0, 'estimated_time': 2},
+            'data_parsing': {'status': 'waiting', 'message': 'Data Parsing', 'progress': 0, 'estimated_time': 3}, 
+            'audio_transcription': {'status': 'waiting', 'message': 'Audio Transcription', 'progress': 0, 'estimated_time': 30},
+            'ai_analysis': {'status': 'waiting', 'message': 'AI Analysis', 'progress': 0, 'estimated_time': 45},
+            'qualification': {'status': 'waiting', 'message': 'Lead Qualification', 'progress': 0, 'estimated_time': 10},
+            'report_generation': {'status': 'waiting', 'message': 'Report Generation', 'progress': 0, 'estimated_time': 5}
         }
+        self.start_time = None
+        self.current_stage = None
     
-    def update_stage(self, stage, status, message=None):
+    def update_stage(self, stage, status, message=None, progress=None):
         self.stages[stage]['status'] = status
         if message:
             self.stages[stage]['message'] = message
+        if progress is not None:
+            self.stages[stage]['progress'] = progress
+        if status == 'processing':
+            self.current_stage = stage
+            if self.start_time is None:
+                self.start_time = time.time()
+    
+    def get_total_progress(self):
+        """Calculate total progress percentage"""
+        total_steps = len(self.stages)
+        completed = sum(1 for s in self.stages.values() if s['status'] == 'complete')
+        current = sum(1 for s in self.stages.values() if s['status'] == 'processing')
+        
+        if current > 0:
+            # Get progress of current stage
+            current_stage = next((s for s in self.stages.values() if s['status'] == 'processing'), None)
+            if current_stage:
+                base_progress = (completed / total_steps) * 100
+                current_progress = (current_stage.get('progress', 0) / 100) * (100 / total_steps)
+                return min(base_progress + current_progress, 100)
+        
+        return (completed / total_steps) * 100
+    
+    def get_estimated_time_remaining(self):
+        """Calculate estimated time remaining"""
+        if not self.current_stage:
+            return 0
+        
+        elapsed = time.time() - self.start_time if self.start_time else 0
+        remaining_stages = [s for s in self.stages.values() if s['status'] in ['waiting', 'processing']]
+        
+        # Estimate based on remaining stages
+        total_remaining = sum(s.get('estimated_time', 0) for s in remaining_stages)
+        
+        # Adjust based on current progress
+        if self.current_stage:
+            current = self.stages[self.current_stage]
+            if current['status'] == 'processing':
+                progress = current.get('progress', 0) / 100
+                current_remaining = current.get('estimated_time', 0) * (1 - progress)
+                total_remaining = current_remaining + sum(
+                    s.get('estimated_time', 0) 
+                    for k, s in self.stages.items() 
+                    if k != self.current_stage and s['status'] == 'waiting'
+                )
+        
+        return max(0, int(total_remaining - elapsed))
+    
+    def display_enhanced_status(self, progress_container=None):
+        """Display enhanced progress with bars and time estimates"""
+        total_progress = self.get_total_progress()
+        time_remaining = self.get_estimated_time_remaining()
+        
+        if progress_container:
+            with progress_container:
+                # Overall progress bar
+                st.progress(total_progress / 100)
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Overall Progress", f"{total_progress:.1f}%")
+                with col2:
+                    if time_remaining > 0:
+                        st.metric("Est. Time Remaining", f"{time_remaining}s")
+                    else:
+                        st.metric("Est. Time Remaining", "Calculating...")
+                
+                st.divider()
+                
+                # Step-by-step status
+                for stage_key, info in self.stages.items():
+                    status = info['status']
+                    message = info['message']
+                    progress = info.get('progress', 0)
+                    
+                    if status == 'processing':
+                        icon = '🔄'
+                        status_class = 'active'
+                        st.markdown(f"<div class='progress-step {status_class}'>", unsafe_allow_html=True)
+                        st.write(f"{icon} **{message}** (In Progress...)")
+                        if progress > 0:
+                            st.progress(progress / 100)
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    elif status == 'complete':
+                        icon = '✅'
+                        status_class = 'complete'
+                        st.markdown(f"<div class='progress-step {status_class}'>", unsafe_allow_html=True)
+                        st.write(f"{icon} **{message}** (Complete)")
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    elif status == 'warning':
+                        icon = '⚠️'
+                        status_class = 'error'
+                        st.markdown(f"<div class='progress-step {status_class}'>", unsafe_allow_html=True)
+                        st.write(f"{icon} **{message}** (Warning)")
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    elif status == 'failed':
+                        icon = '❌'
+                        status_class = 'error'
+                        st.markdown(f"<div class='progress-step {status_class}'>", unsafe_allow_html=True)
+                        st.write(f"{icon} **{message}** (Failed)")
+                        st.markdown("</div>", unsafe_allow_html=True)
+                    else:
+                        icon = '⚪'
+                        st.write(f"{icon} {message} (Waiting)")
     
     def display_status(self):
+        """Legacy method for backward compatibility"""
         for stage, info in self.stages.items():
             status = info['status']
             if status == 'processing': icon = '🔄'
@@ -148,7 +395,6 @@ class FormParser:
             'condition': ['Condition'],
             'occupancy': ['Occupancy'],
             'closing_time': ['Closing time'],
-            'moving_time': ['Moving time'],
             'best_time_to_call': ['Best time to call back'],
             'agent_name': ['Agent Name'],
             'call_recording': ['Call recording']
@@ -221,7 +467,6 @@ class FormParser:
             'condition': self._clean_condition,
             'reason_for_selling': self._clean_reason,
             'closing_time': self._clean_closing_time,
-            'moving_time': self._clean_closing_time,
             'motivation_details': self._clean_motivation,
         }
         
@@ -373,6 +618,9 @@ class FormParser:
         return condition.strip()
     
     def _clean_reason(self, reason: str) -> str:
+        if not reason or not reason.strip():
+            return "Not mentioned"
+        
         reason_lower = reason.lower()
         if any(phrase in reason_lower for phrase in ['fix', 'investment', 'flip']):
             return "Property investment business"
@@ -380,7 +628,10 @@ class FormParser:
             return "Financial pressure from property taxes"
         if any(word in reason_lower for word in ['relocat', 'move']):
             return "Relocation"
-        return "Standard property disposition"
+        
+        # If reason doesn't match specific patterns, return original text or "Not mentioned"
+        # This avoids the generic "Standard property disposition" label
+        return reason.strip() if reason.strip() else "Not mentioned"
     
     def _clean_closing_time(self, time: str) -> str:
         time = time.strip().lower()
@@ -498,58 +749,85 @@ class AudioProcessor:
 
 # --- ConversationSummarizer Class ---
 class ConversationSummarizer:
-    """Generates a summary of the conversation."""
+    """Generates a summary of the conversation in the new format."""
     
-    def __init__(self):
-        pass
-
+    def __init__(self, ai_client=None):
+        self.client = ai_client
+        self.model = "deepseek-chat"
+    
     def summarize(self, transcript: str, nlp_data: Dict[str, str]) -> str:
-        """Generate enhanced summary based on extracted NLP data"""
+        """Generate enhanced summary in the new format: Summary, Discussion Highlights, Action Items, Full Transcript"""
         if not transcript:
             return "No transcript available for summarization."
         
-        key_points = []
-        
-        reason = nlp_data.get('reason', '')
-        if reason and "no reason" not in reason.lower():
-            key_points.append(f"Reason for Selling: {reason}")
-        
-        motivation = nlp_data.get('motivation', '')
-        if motivation and "no motivation" not in motivation.lower():
-            key_points.append(f"Seller Motivation: {motivation}")
-            
-        personality = nlp_data.get('personality', '')
-        if personality and "did not share" not in personality.lower():
-            key_points.append(f"Seller Personality: {personality}")
+        # Use AI to generate the structured analysis
+        if self.client:
+            try:
+                system_prompt = f"""
+                You are an expert real estate call analyst. Analyze the following call transcript and create a structured analysis.
 
-        condition = nlp_data.get('condition', '')
-        if condition and "no specific" not in condition.lower():
-            key_points.append(f"Property Condition: {condition}")
-            
-        mortgage = nlp_data.get('mortgage', '')
-        if mortgage and "no mortgage" not in mortgage.lower():
-            key_points.append(f"Mortgage Status: {mortgage}")
-
-        occupancy = nlp_data.get('tenant', '')
-        if occupancy and "no occupancy" not in occupancy.lower():
-            key_points.append(f"Occupancy: {occupancy}")
-        
-        
-        summary_lines = [
-            "ENHANCED CONVERSATION ANALYSIS",
-            "=" * 60,
-            "",
-            "KEY DISCUSSION POINTS:",
-            "-" * 40
-        ]
-        
-        if key_points:
-            for point in key_points:
-                summary_lines.append(f"• {point}")
+                CRITICAL FORMATTING RULES:
+                1. Start with "Summary" as a header (no dashes, just the word "Summary")
+                2. Write 2-3 sentences summarizing the overall purpose and outcome of the call.
+                3. Add a blank line, then "Discussion Highlights" as a header
+                4. List 5-8 key points discussed (each on a new line, no bullet points needed - just plain text with line breaks)
+                5. Add a blank line, then "Action Items" as a header
+                6. List specific next steps or commitments made (each on a new line, no bullet points)
+                7. Be specific and factual - use information directly from the transcript.
+                8. Format exactly like this example:
+                
+                Summary
+                [2-3 sentences about the call]
+                
+                Discussion Highlights
+                [Point 1]
+                [Point 2]
+                [Point 3]
+                
+                Action Items
+                [Action 1]
+                [Action 2]
+                
+                Transcript:
+                {transcript}
+                """
+                
+                chat_completion = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": "Analyze this call and create the structured summary with Summary, Discussion Highlights, and Action Items."}
+                    ],
+                    temperature=0.1,
+                    max_tokens=800
+                )
+                
+                ai_summary = chat_completion.choices[0].message.content.strip()
+                return ai_summary
+                
+            except Exception as e:
+                st.error(f"❌ AI Summary Error: {e}")
+                # Fallback to basic format
+                return self._generate_fallback_summary(transcript, nlp_data)
         else:
-            summary_lines.append("• Key details were not clearly discussed in the conversation.")
-            
-        summary_lines.append("")
+            # Fallback if no AI client
+            return self._generate_fallback_summary(transcript, nlp_data)
+    
+    def _generate_fallback_summary(self, transcript: str, nlp_data: Dict[str, str]) -> str:
+        """Fallback summary if AI is not available"""
+        summary_lines = [
+            "Summary",
+            "Agent called to inquire about purchasing the property.",
+            "",
+            "Discussion Highlights",
+            "• Agent expressed interest in buying the property",
+            "• Property details were discussed",
+            "• Closing timeline and reasons for selling were discussed",
+            "",
+            "Action Items",
+            "• Agent to review information and follow up",
+            ""
+        ]
         return "\n".join(summary_lines)
 
 # --- AIRephraser Class ---
@@ -729,12 +1007,12 @@ class AIRephraser:
             You are an expert real estate data formatter. Your job is to clean and standardize a raw property type description from a form.
 
             CRITICAL FORMATTING RULES:
-            1. Final Format: "PropertyType (X unit), Y Bedrooms, Z Bathrooms, SQFT Square Feet"
+            1. Final Format: "PropertyType (X unit), Y Bedrooms, Z Bathrooms, SQFT Square Feet" OR "PropertyType, Y Bedrooms, Z Bathrooms, SQFT Square Feet" if single unit
             2. Commas are required: Use commas to separate all elements.
             3. No Slashes: DO NOT use slashes (/).
             4. No Abbreviations: DO NOT use abbreviations like 'bed', 'beds', 'ba', 'sf', 'sqft'. Always write out "Bedrooms", "Bathrooms", "Square Feet".
             5. Capitalization: Capitalize property types (e.g., "Single Family", "Duplex", "MultiFamily").
-            6. Units: Always include a unit count in parentheses, e.g., "(1 unit)", "(2 unit)".
+            6. Units: ONLY include unit count in parentheses if there are 2 or more units, e.g., "(2 unit)", "(3 unit)", "(4 unit)". If there is only 1 unit, DO NOT include "(1 unit)" - just write the property type without parentheses.
             7. Plurals: Use plurals correctly: "1 Bedroom", "2 Bedrooms", "1 Bathroom", "2.5 Bathrooms".
             8. Vacant Land: If it is land, the format is "Vacant land, X acres".
 
@@ -912,6 +1190,120 @@ class DataValidator:
             return reason_text[:max_length-3] + "..."
         
         return reason_text.strip()
+    
+    def validate_lead_data(self, form_data: Dict[str, FieldData]) -> Dict[str, Any]:
+        """Validate lead data and return warnings/errors"""
+        warnings = []
+        errors = []
+        confidence_scores = {}
+        
+        # Critical fields validation
+        critical_fields = {
+            'address': 'Address',
+            'seller_name': 'Seller Name',
+            'phone_number': 'Phone Number',
+            'property_type': 'Property Type'
+        }
+        
+        for field_key, field_name in critical_fields.items():
+            field_data = form_data.get(field_key)
+            if not field_data or not field_data.value or field_data.value.strip() == "" or field_data.value == "Not mentioned":
+                errors.append(f"Missing critical field: {field_name}")
+                confidence_scores[field_key] = 0.0
+            else:
+                confidence_scores[field_key] = field_data.confidence
+        
+        # Price validation
+        asking_price = form_data.get('asking_price', FieldData("", "")).value
+        if asking_price and asking_price != "Waiting for our offer":
+            try:
+                # Extract numeric value
+                price_str = str(asking_price).replace('$', '').replace(',', '').replace(' ', '')
+                # Remove non-numeric except decimal point
+                price_str = ''.join(c for c in price_str if c.isdigit() or c == '.')
+                if price_str:
+                    price_value = float(price_str)
+                    
+                    # Flag suspicious prices
+                    if price_value < 10000:
+                        warnings.append(f"Suspiciously low asking price: ${price_value:,.0f}")
+                    elif price_value > 10000000:
+                        warnings.append(f"Very high asking price: ${price_value:,.0f} (verify accuracy)")
+                    
+                    # Compare with estimates
+                    zillow_est = form_data.get('zillow_estimate', FieldData("", "")).value
+                    if zillow_est and zillow_est != "Not mentioned":
+                        try:
+                            zillow_str = str(zillow_est).replace('$', '').replace(',', '').replace(' ', '')
+                            zillow_str = ''.join(c for c in zillow_str if c.isdigit() or c == '.')
+                            if zillow_str:
+                                zillow_value = float(zillow_str)
+                                diff_percent = abs((price_value - zillow_value) / zillow_value) * 100
+                                if diff_percent > 50:
+                                    warnings.append(f"Asking price differs significantly from Zillow estimate ({diff_percent:.1f}% difference)")
+                        except:
+                            pass
+            except:
+                warnings.append("Unable to validate asking price format")
+        
+        # Phone number validation
+        phone = form_data.get('phone_number', FieldData("", "")).value
+        if phone and phone != "Not mentioned":
+            digits = ''.join(c for c in phone if c.isdigit())
+            if len(digits) < 10:
+                errors.append("Invalid phone number format")
+                confidence_scores['phone_number'] = 0.3
+            elif len(digits) == 10 or len(digits) == 11:
+                confidence_scores['phone_number'] = 0.9
+        
+        # Confidence scoring
+        overall_confidence = sum(confidence_scores.values()) / len(confidence_scores) if confidence_scores else 0.5
+        
+        return {
+            'warnings': warnings,
+            'errors': errors,
+            'confidence_scores': confidence_scores,
+            'overall_confidence': overall_confidence,
+            'is_valid': len(errors) == 0
+        }
+    
+    def display_validation_results(self, validation_results: Dict[str, Any]):
+        """Display validation results with color-coded warnings"""
+        if not validation_results:
+            return
+        
+        errors = validation_results.get('errors', [])
+        warnings = validation_results.get('warnings', [])
+        confidence = validation_results.get('overall_confidence', 0.5)
+        
+        # Display errors
+        if errors:
+            st.markdown("### ⚠️ Data Validation Issues")
+            for error in errors:
+                st.markdown(f'<div class="validation-error">❌ {error}</div>', unsafe_allow_html=True)
+        
+        # Display warnings
+        if warnings:
+            if not errors:
+                st.markdown("### ⚠️ Data Validation Warnings")
+            for warning in warnings:
+                st.markdown(f'<div class="validation-warning">⚠️ {warning}</div>', unsafe_allow_html=True)
+        
+        # Display confidence indicator
+        if confidence >= 0.8:
+            confidence_class = "confidence-high"
+            confidence_text = "High"
+        elif confidence >= 0.5:
+            confidence_class = "confidence-medium"
+            confidence_text = "Medium"
+        else:
+            confidence_class = "confidence-low"
+            confidence_text = "Low"
+        
+        if errors or warnings:
+            st.markdown(f'<div class="validation-warning">📊 <span class="{confidence_class}">Data Confidence: {confidence_text} ({confidence*100:.0f}%)</span></div>', unsafe_allow_html=True)
+        elif confidence < 0.8:
+            st.info(f"📊 Data Confidence: {confidence_text} ({confidence*100:.0f}%)")
 
 # --- DataMerger Class ---
 class DataMerger:
@@ -919,39 +1311,14 @@ class DataMerger:
     
     def merge(self, form_data: Dict[str, FieldData], transcript: str, audio_analysis: Dict[str, Any]) -> Dict[str, FieldData]:
         merged = form_data.copy()
-        
-        moving_time_data = merged.get('moving_time')
-        moving_time_value = moving_time_data.value if moving_time_data else ""
-
-        if not moving_time_value or moving_time_value == "Not mentioned":
-            property_type_data = merged.get('property_type')
-            property_type = property_type_data.value if property_type_data else ""
-            
-            if 'vacant lot' in str(property_type).lower():
-                merged['moving_time'] = FieldData(
-                    value="Not applicable - vacant lot",
-                    source='derived',
-                    confidence=0.9
-                )
-            else:
-                closing_time_data = merged.get('closing_time')
-                closing_time = closing_time_data.value if closing_time_data else ""
-                
-                if closing_time and closing_time != "Not mentioned" and closing_time != "":
-                    merged['moving_time'] = FieldData(
-                        value=closing_time,
-                        source='derived',
-                        confidence=0.7
-                    )
-        
         return merged
 
 # --- ReportGenerator Class ---
 class ReportGenerator:
     """Generate professional text reports with enhanced data."""
     
-    def __init__(self):
-        self.conversation_summarizer = ConversationSummarizer()
+    def __init__(self, ai_client=None):
+        self.conversation_summarizer = ConversationSummarizer(ai_client=ai_client)
         
         self.form_fields = [
             ('list_name', 'List Name'),
@@ -969,7 +1336,6 @@ class ReportGenerator:
             ('condition', 'Condition'),
             ('occupancy', 'Occupancy'),
             ('closing_time', 'Closing time'),
-            ('moving_time', 'Moving time'),
             ('best_time_to_call', 'Best time to call back'),
             ('agent_name', 'Agent Name'),
             ('call_recording', 'Call recording'),
@@ -1084,10 +1450,31 @@ class ReportGenerator:
         
         lines.extend(self._format_qualification_section(qualification_results))
 
+        # Add the new conversation analysis format
         if transcript:
+            # Generate the structured analysis (Summary, Discussion Highlights, Action Items)
+            conversation_analysis = self.conversation_summarizer.summarize(transcript, nlp_data)
+            lines.extend([
+                "",
+                "=" * 50,
+                "CALL ANALYSIS",
+                "=" * 50,
+                "",
+                conversation_analysis,
+                ""
+            ])
+            
+            # Add Full Transcript section
             lines.extend(self._format_full_transcript(merged_data, transcript))
         else:
             lines.extend([
+                "",
+                "=" * 50,
+                "CALL ANALYSIS",
+                "=" * 50,
+                "",
+                "No call recording available for analysis.",
+                "",
                 "-" * 50,
                 "FULL CALL TRANSCRIPT",
                 "-" * 50,
@@ -1127,12 +1514,12 @@ class RealEstateAutomationSystem:
         self.form_parser = FormParser()
         self.audio_processor = AudioProcessor()
         self.data_merger = DataMerger()
-        self.report_generator = ReportGenerator() 
         self.data_validator = DataValidator()
         self.ai_qualifier = None
 
         self.nlp_analyzer = None
         self.rephraser = None
+        self.report_generator = None  # Will be initialized after AI client is ready
 
         self._initialize_analyzers()
 
@@ -1144,15 +1531,31 @@ class RealEstateAutomationSystem:
 
         if self.rephraser.client:
             self.ai_qualifier = AIQualifier(client=self.rephraser.client)
+            self.report_generator = ReportGenerator(ai_client=self.rephraser.client)
         else:
             st.error("❌ AI Qualifier NOT initialized (API client missing).")
+            self.report_generator = ReportGenerator()  # Fallback without AI
 
     def process_lead(self, input_file_path: str, input_filename: str) -> tuple[str, str]:
-        # --- NEW: Collapsible Status Container ---
+        # --- Enhanced Progress Tracking ---
+        progress_tracker = ProcessStatus()
+        
+        # Create progress display area outside status
+        progress_placeholder = st.empty()
+        
         with st.status("🔄 System Processing...", expanded=True) as status:
+            # Update progress: File Upload
+            progress_tracker.update_stage('file_upload', 'processing', 'Uploading and parsing file...', 10)
+            with progress_placeholder.container():
+                progress_tracker.display_enhanced_status()
             
             st.write("📂 Uploading and parsing file...")
             form_data = self.form_parser.parse_file(input_file_path)
+            progress_tracker.update_stage('file_upload', 'complete', 'File parsed successfully', 100)
+            progress_tracker.update_stage('data_parsing', 'processing', 'Extracting form data...', 20)
+            with progress_placeholder.container():
+                progress_tracker.display_enhanced_status()
+            
             call_recording_url = form_data.get('call_recording').value if form_data.get('call_recording') else None
             
             audio_result = {'success': False}
@@ -1160,26 +1563,43 @@ class RealEstateAutomationSystem:
             nlp_analysis = {}
             
             if call_recording_url and call_recording_url.strip():
+                progress_tracker.update_stage('data_parsing', 'complete', 'Data parsed', 100)
+                progress_tracker.update_stage('audio_transcription', 'processing', 'Transcribing audio (Groq API)...', 10)
+                with progress_placeholder.container():
+                    progress_tracker.display_enhanced_status()
+                
                 st.write("🎧 Transcribing audio (Groq API)...")
-                audio_result = self.audio_processor.transcribe_audio(call_recording_url) # Removed status_tracker arg
+                audio_result = self.audio_processor.transcribe_audio(call_recording_url)
 
                 if not audio_result['success']:
+                    progress_tracker.update_stage('audio_transcription', 'failed', 'Transcription failed')
                     status.update(label="❌ Processing Failed", state="error")
                     st.error("Transcription failed.")
                     return "Process stopped", "error.txt"
                 
                 transcript = audio_result['transcript']
+                progress_tracker.update_stage('audio_transcription', 'complete', 'Transcription complete', 100)
+                progress_tracker.update_stage('ai_analysis', 'processing', 'AI Analysis in progress...', 20)
+                with progress_placeholder.container():
+                    progress_tracker.display_enhanced_status()
                 
                 st.write("🗣️ Identifying speakers (Diarization)...")
                 agent_name = form_data.get('agent_name').value
                 seller_name = form_data.get('seller_name').value
                 transcript = self.rephraser.diarize_transcript(transcript, agent_name, seller_name)
                 audio_result['transcript'] = transcript
+                progress_tracker.update_stage('ai_analysis', 'processing', 'Diarization complete, analyzing...', 40)
+                with progress_placeholder.container():
+                    progress_tracker.display_enhanced_status()
 
                 st.write("🧠 Analyzing conversation psychology...")
                 nlp_analysis = self.nlp_analyzer.analyze_transcript(transcript)
-
+                progress_tracker.update_stage('ai_analysis', 'processing', 'Extracting insights...', 60)
+                with progress_placeholder.container():
+                    progress_tracker.display_enhanced_status()
+                
                 st.write("🤖 Extracting DeepSeek insights...")
+
                 # AI Analysis Steps
                 curr_pt = form_data.get('property_type').value or ""
                 if curr_pt and "Not Specified" not in curr_pt:
@@ -1193,28 +1613,50 @@ class RealEstateAutomationSystem:
                 nlp_analysis['tenant'] = self.rephraser.rephrase("Occupancy Status", transcript)
                 nlp_analysis['highlights'] = self.rephraser.rephrase("Important Highlights", transcript)
                 nlp_analysis['personality'] = self.rephraser.rephrase("Seller Personality", transcript)
+                progress_tracker.update_stage('ai_analysis', 'processing', 'Merging insights...', 80)
+                with progress_placeholder.container():
+                    progress_tracker.display_enhanced_status()
 
                 st.write("🔄 Merging data sources...")
                 form_data = self._apply_conversation_insights(form_data, nlp_analysis)
+                progress_tracker.update_stage('ai_analysis', 'complete', 'AI Analysis complete', 100)
+                with progress_placeholder.container():
+                    progress_tracker.display_enhanced_status()
                 
             else:
                 st.warning("⚠️ No call recording URL found.")
+                progress_tracker.update_stage('data_parsing', 'complete', 'Data parsed', 100)
+                with progress_placeholder.container():
+                    progress_tracker.display_enhanced_status()
 
             st.write("🔗 Finalizing derived fields...")
             form_data = self.data_merger.merge(form_data, transcript, audio_result)
+            progress_tracker.update_stage('qualification', 'processing', 'Calculating lead score...', 50)
+            with progress_placeholder.container():
+                progress_tracker.display_enhanced_status()
 
             st.write("⚖️ Calculating Lead Score...")
             qualification_results = self.ai_qualifier.qualify(form_data)
-            
+            progress_tracker.update_stage('qualification', 'complete', 'Qualification complete', 100)
+            progress_tracker.update_stage('report_generation', 'processing', 'Generating report...', 50)
+            with progress_placeholder.container():
+                progress_tracker.display_enhanced_status()
             
             st.write("📄 Generating report...")
+            
             raw_data_content = self.report_generator.generate_clean_data_block(form_data)
             raw_data_filename = f"processed_{input_filename}"
             report_content = self.report_generator.generate_report(form_data, transcript, audio_result, nlp_analysis, qualification_results, input_filename)
             
             output_filename = self.report_generator.save_report(report_content, input_filename)
+            progress_tracker.update_stage('report_generation', 'complete', 'Report generated', 100)
+            with progress_placeholder.container():
+                progress_tracker.display_enhanced_status()
             
             status.update(label="✅ Processing Complete!", state="complete", expanded=False)
+        
+        # Clear progress placeholder after completion
+        progress_placeholder.empty()
         
         # --- NEW: Dashboard Results Layout ---
         st.divider()
@@ -1242,11 +1684,22 @@ class RealEstateAutomationSystem:
                 mime="text/plain",
                 type='primary'
             )
+        # --- Data Validation Warnings ---
+        validation_results = self.data_validator.validate_lead_data(form_data)
+        if validation_results.get('warnings') or validation_results.get('errors'):
+            self.data_validator.display_validation_results(validation_results)
+            st.divider()
+        
         # Top Row Metrics
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             score = qualification_results.get('total_score', 0)
-            st.metric("Lead Score", f"{score}/100", delta="High Priority" if score > 75 else None)
+            delta_color = "normal"
+            if score > 75:
+                delta_color = "normal"
+            elif score < 50:
+                delta_color = "inverse"
+            st.metric("Lead Score", f"{score}/100", delta="High Priority" if score > 75 else ("Low Priority" if score < 50 else None), delta_color=delta_color)
         with col2:
             verdict = qualification_results.get('verdict', 'N/A')
             st.metric("Verdict", verdict)
@@ -1254,12 +1707,13 @@ class RealEstateAutomationSystem:
             price = form_data.get('asking_price', FieldData("N/A","")).value
             st.metric("Asking Price", str(price)[:15])
         with col4:
-            motivation = nlp_analysis.get('motivation', 'N/A')
-            st.metric("Motivation", motivation)
+            confidence = validation_results.get('overall_confidence', 0.5)
+            confidence_pct = f"{confidence*100:.0f}%"
+            st.metric("Data Confidence", confidence_pct)
 
         # Tabs Layout
        # --- IMPROVED TABS LAYOUT ---
-        tab1, tab2, tab3, tab4 = st.tabs(["💾 DOWNLOADS", "🧠 AI INSIGHTS", "🎵 TRANSCRIPT", "📋 RAW DATA"])
+        tab1, tab2, tab3, tab4 = st.tabs(["💾 DOWNLOADS", "🧠 AI INSIGHTS", "🎵 TRANSCRIPT & AUDIO", "📋 RAW DATA"])
         
         with tab1:
             st.subheader("📋 Final Processed Data")
@@ -1329,8 +1783,21 @@ class RealEstateAutomationSystem:
             display_score_row("Condition", "condition", 10)
 
         with tab3: 
-            st.markdown("### Call Transcript (Diarized)")
-            st.text_area("Transcript", transcript or "N/A", height=500, label_visibility="collapsed")
+            # Audio Player Section
+            call_recording_url = form_data.get('call_recording').value if form_data.get('call_recording') else None
+            if call_recording_url and call_recording_url.strip():
+                render_audio_player(call_recording_url, transcript)
+                st.divider()
+            else:
+                st.info("ℹ️ No call recording URL available for playback")
+                st.divider()
+            
+            # Transcript Section
+            st.markdown("### 📝 Call Transcript (Diarized)")
+            if transcript:
+                st.text_area("Transcript", transcript, height=500, label_visibility="collapsed", key="transcript_display")
+            else:
+                st.warning("No transcript available")
             
         with tab4: 
             st.json(qualification_results)
@@ -1439,18 +1906,46 @@ with st.sidebar:
     process_btn = st.button("🚀 Process Lead", type="primary", use_container_width=True)
 
 # --- Main Area ---
-st.title("🏠 AI Real Estate Manager")
-st.caption("Automated Lead Qualification, Transcription & Analysis System")
+st.markdown("""
+<div style='text-align: center; padding: 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; margin-bottom: 30px;'>
+    <h1 style='color: white; margin: 0;'>🏠 AI Real Estate Manager</h1>
+    <p style='color: white; font-size: 18px; margin: 10px 0 0 0;'>Automated Lead Qualification, Transcription & Analysis System</p>
+</div>
+""", unsafe_allow_html=True)
 
 if not lead_data:
-    st.info("👈 Please provide lead data in the sidebar to begin.")
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("""
+        <div style='text-align: center; padding: 30px; background-color: #f0f2f6; border-radius: 10px; margin: 20px 0;'>
+            <h3>👈 Get Started</h3>
+            <p>Please provide lead data in the sidebar to begin processing.</p>
+        </div>
+        """, unsafe_allow_html=True)
     
-    # Optional: Show a dummy example if empty
-    with st.expander("See Example Input Format"):
+    # Enhanced example with more details
+    with st.expander("📖 See Example Input Format", expanded=False):
+        st.markdown("**Example Lead Data Format:**")
         st.code("""◇List Name: out of state
 ◇Property Type: Single Family
 ◇Seller Name: John Doe
+◇Phone Number: (555) 123-4567
+◇Address: 123 Main St, City, State 12345
+◇Zillow link: https://www.zillow.com/...
+◇Asking Price: $250,000
+◇Zillow Estimate: $240,000
+◇Realtor Estimate: $245,000
+◇Redfin Estimate: $242,000
+◇Reason For Selling: Relocation
+◇Mortgage: Free and clear
+◇Condition: Good condition, recently renovated
+◇Occupancy: Owner occupied
+◇Closing time: As soon as possible
+◇Best time to call back: Anytime
+◇Agent Name: David White
 ◇Call recording: https://example.com/audio.mp3""", language="text")
+        
+        st.info("💡 **Tip:** You can either paste the data directly or upload a `.txt` file with this format.")
 
 if lead_data and process_btn:
     # Create temp file
