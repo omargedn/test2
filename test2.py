@@ -1764,6 +1764,18 @@ class RealEstateAutomationSystem:
             )
             
         with tab2:
+            # --- Call Analysis Section (Summary, Discussion Highlights, Action Items) ---
+            if transcript:
+                st.markdown("### 📊 Call Analysis")
+                st.markdown("---")
+                
+                # Generate and display the structured analysis
+                conversation_analysis = self.report_generator.conversation_summarizer.summarize(transcript, nlp_analysis)
+                
+                # Display the analysis with proper formatting
+                st.markdown(conversation_analysis)
+                st.divider()
+            
             # --- Top Section: Highlights & Details ---
             c1, c2 = st.columns(2)
             with c1:
